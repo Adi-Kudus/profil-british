@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Profil Baja Pro v3.0 — Pustaka Profil Baja British BS 4-1 · Eurocode EN 10365</title>
-<meta name="description" content="Pustaka digital profil baja: UB · UC · PFC (BS 4-1:2005) dan IPE · HEA · HEB · HEM · UPN · UPE (EN 10365 / DIN 1026) — properti penampang lengkap (A, Ix, Iy, S, Z, J, Cw, rts, λ), verifikasi massa otomatis, visualisasi penampang.">
+<title>Profil Baja Pro v4.0 — Pustaka Profil Baja BS 4-1 · EN 10365 · JIS</title>
+<meta name="description" content="Pustaka digital profil baja 3 standar: BS 4-1:2005 (UB·UC·PFC), EN 10365 (IPE·HE·UPN·UPE), JIS G 3192/3350 (HW·HM·HN·I·UNP·CNP) — properti penampang lengkap (A, Ix, Iy, S, Z, J, Cw, rts, λ), verifikasi otomatis, visualisasi penampang.">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -53,8 +53,8 @@
         <i class="fa-solid fa-i-cursor text-emerald-300 text-lg"></i>
       </div>
       <div>
-        <h1 class="font-display text-sm md:text-base text-emerald-300 tracking-wider leading-tight">PROFIL BAJA PRO <span class="text-amber-400">v3.0</span></h1>
-        <p class="text-[10px] md:text-[11px] text-emerald-700">Pustaka Profil Baja — BS 4-1:2005 (British) · EN 10365 / DIN 1026 (Eurocode)</p>
+        <h1 class="font-display text-sm md:text-base text-emerald-300 tracking-wider leading-tight">PROFIL BAJA PRO <span class="text-amber-400">v4.0</span></h1>
+        <p class="text-[10px] md:text-[11px] text-emerald-700">Pustaka Profil Baja — BS 4-1:2005 · EN 10365 / DIN 1026 · JIS G 3192 / 3350</p>
       </div>
     </div>
     <div class="ml-auto flex flex-wrap items-center gap-1.5 text-[10px] md:text-[11px] font-mono2">
@@ -68,8 +68,9 @@
 <div class="max-w-7xl mx-auto px-3 md:px-6 mt-4">
   <div class="glass rounded-2xl p-3 flex flex-wrap items-center gap-2">
     <div class="flex rounded-xl overflow-hidden border border-emerald-700 text-xs font-bold">
-      <button id="stdBS" class="std-btn px-3 py-1.5 transition">BS 4-1</button>
-      <button id="stdEN" class="std-btn px-3 py-1.5 transition border-l border-emerald-800">EN 10365</button>
+      <button data-std="BS" class="std-btn px-3 py-1.5 transition">BS 4-1</button>
+      <button data-std="EN" class="std-btn px-3 py-1.5 transition border-l border-emerald-800">EN 10365</button>
+      <button data-std="JIS" class="std-btn px-3 py-1.5 transition border-l border-emerald-800">JIS G 3192</button>
     </div>
     <div id="famTabs" class="flex items-center gap-1.5 flex-wrap"></div>
     <div class="relative flex-1 min-w-[160px]">
@@ -186,7 +187,7 @@
                  + pustaka-eurocode.json (EN 10365 / DIN 1026)
    Properti penampang dihitung geometris dari dimensi nominal.
    ================================================================== */
-const LIBS = { BS: __LIB_JSON__, EN: __LIB_EN_JSON__ };
+const LIBS = { BS: __LIB_JSON__, EN: __LIB_EN_JSON__, JIS: __LIB_JIS_JSON__ };
 
 const RHO = 0.00785;
 
@@ -216,6 +217,12 @@ function iPoly(h, b, tw, tf, r) {
   for (let i = right.length - 2; i >= 1; i--) pts.push([-right[i][0], right[i][1]]);
   return pts;
 }
+function cnpPoly(h, b, c, t) {
+  return [
+    [0, 0], [b, 0], [b, c], [b - t, c], [b - t, t], [t, t],
+    [t, h - t], [b - t, h - t], [b - t, h - c], [b, h - c], [b, h], [0, h]
+  ];
+}
 function chPoly(h, b, tw, tf, r) {
   const n = 8, pts = [];
   pts.push([0, h]); pts.push([b, h]); pts.push([b, h - tf]); pts.push([tw + r, h - tf]);
@@ -229,17 +236,24 @@ function chPoly(h, b, tw, tf, r) {
 /* ==================================================================
    PEMBANGUNAN PUSTAKA dari LIBS[std].profil
    ================================================================== */
-function fromLib(p) {
+function fromLib(p, std) {
   const dim = p.dim;
-  const mNomT = p.nama.split('x').pop();
-  const mNom = /^\d+(\.\d+)?$/.test(mNomT) && p.nama.includes('x') ? parseFloat(mNomT) : null;
-  const dev = mNom ? (p.berat / mNom - 1) * 100 : null;
-  const isK = p.keluarga === 'kanal';
-  const pts = isK ? chPoly(dim.h, dim.b, dim.tw, dim.tf, dim.r) : iPoly(dim.h, dim.b, dim.tw, dim.tf, dim.r);
+  const cd = p.keluarga === 'kanal-canai-dingin';
+  let mNom = null, dev = null;
+  if (std === 'BS') {
+    const mNomT = p.nama.split('x').pop();
+    mNom = /^\d+(\.\d+)?$/.test(mNomT) && p.nama.includes('x') ? parseFloat(mNomT) : null;
+    dev = mNom ? (p.berat / mNom - 1) * 100 : null;
+  }
+  const isK = p.keluarga !== 'i-shape';
+  const pts = cd ? cnpPoly(dim.h, dim.b, dim.c, dim.t)
+    : isK ? chPoly(dim.h, dim.b, dim.tw, dim.tf, dim.r)
+    : iPoly(dim.h, dim.b, dim.tw, dim.tf, dim.r);
   return {
     kel: p.kode, nama: p.nama, tipe: p.keluarga, sumber: p.sumber,
-    simetri: p.simetri, raw: p,
-    h: dim.h, b: dim.b, tw: dim.tw, tf: dim.tf, r: dim.r,
+    simetri: p.simetri, raw: p, canaiDingin: !!p.canaiDingin || cd,
+    h: dim.h, b: dim.b, tw: dim.tw !== undefined ? dim.tw : dim.t, tf: dim.tf !== undefined ? dim.tf : dim.t, r: dim.r !== undefined ? dim.r : 0,
+    cLip: dim.c !== undefined ? dim.c : null,
     mNom, berat: p.berat, dev, catatan: p.catatan || null, sayapTirus: !!p.sayapTirus,
     A: p.A / 100,
     Ix: p.Ix / 1e4, Iy: p.Iy / 1e4,
@@ -334,7 +348,7 @@ function svgSection(p) {
   pts.forEach((pt, i) => { d += (i ? 'L' : 'M') + X(pt[0]).toFixed(1) + ' ' + Y(pt[1]).toFixed(1) + ' '; });
   d += 'Z';
   // centroid: I-shape x=0; kanal pakai xg dari data
-  const cx = X(p.tipe === 'kanal' ? p.xg : 0), cyB = Y(p.h / 2);
+  const cx = X(p.tipe === 'i-shape' ? 0 : p.xg), cyB = Y(p.h / 2);
   let s = '<svg viewBox="0 0 340 300" class="w-full">';
   s += '<defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="rgba(52,211,153,.10)"/><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(52,211,153,.35)" stroke-width="1.2"/></pattern></defs>';
   s += '<path d="' + d + '" fill="url(#hatch)" stroke="#34d399" stroke-width="1.6"/>';
@@ -365,16 +379,20 @@ function openDetail(nama) {
   document.getElementById('dTitle').textContent = p.nama;
   document.getElementById('dSvg').innerHTML = svgSection(p);
   const ok = p.dev === null ? null : Math.abs(p.dev) <= 2;
-  const tipeLabel = p.tipe === 'i-shape' ? 'Profil I Ganda Simetri' : (p.sayapTirus ? 'Kanal Sayap Tirus' : 'Kanal Sayap Sejajar');
+  const tipeLabel = p.tipe === 'i-shape' ? 'Profil I Ganda Simetri' : (p.canaiDingin ? 'Lip Channel Canai Dingin' : (p.sayapTirus ? (p.kel.startsWith('I') ? 'I-Beam Sayap Tirus' : 'Kanal Sayap Tirus') : 'Kanal Sayap Sejajar'));
   const vBadge = p.dev === null
     ? '<span class="px-2 py-1 rounded-lg badge-ok ml-1">KONSISTENSI A×7850 ✓</span>'
     : '<span class="px-2 py-1 rounded-lg ' + (ok ? 'badge-ok' : 'badge-warn') + ' ml-1">VERIFIKASI Δm ' + (p.dev >= 0 ? '+' : '') + p.dev.toFixed(2) + '% ' + (ok ? '✓' : '') + '</span>';
   document.getElementById('dBadge').innerHTML =
     '<span class="px-2 py-1 rounded-lg badge-ok">' + p.kel + ' · ' + tipeLabel + ' · simetri ' + p.simetri + '</span>' + vBadge;
-  const rows = [
-    ['Tinggi h', p.h.toFixed(1) + ' mm'], ['Lebar b', p.b.toFixed(1) + ' mm'],
-    ['Tebal web tw', p.tw.toFixed(1) + ' mm'], ['Tebal sayap tf', p.tf.toFixed(1) + ' mm'],
-    ['Radius fillet r', p.r.toFixed(1) + ' mm'], ['Massa nominal', p.mNom ? p.mNom + ' kg/m' : '— (nama seri)'],
+  const dimRows = p.canaiDingin
+    ? [['Tinggi h', p.h.toFixed(1) + ' mm'], ['Lebar b', p.b.toFixed(1) + ' mm'],
+       ['Lip c', p.cLip.toFixed(1) + ' mm'], ['Tebal t (seragam)', p.tw.toFixed(1) + ' mm'],
+       ['Massa nominal', '— (nama dimensi)']]
+    : [['Tinggi h', p.h.toFixed(1) + ' mm'], ['Lebar b', p.b.toFixed(1) + ' mm'],
+       ['Tebal web tw', p.tw.toFixed(1) + ' mm'], ['Tebal sayap tf', p.tf.toFixed(1) + ' mm'],
+       ['Radius fillet r', p.r.toFixed(1) + ' mm'], ['Massa nominal', p.mNom ? p.mNom + ' kg/m' : '— (nama seri)']];
+  const rows = dimRows.concat([
     ['Luas A', p.A.toFixed(2) + ' cm²'], ['Berat geometris', p.berat.toFixed(2) + ' kg/m'],
     ['Inersia Ix', fmt(p.Ix) + ' cm⁴'], ['Inersia Iy', fmt(p.Iy) + ' cm⁴'],
     ['Elastis Sx', fmt(p.Sx) + ' cm³'], ['Elastis Sy', fmt(p.Sy) + ' cm³'],
@@ -383,8 +401,8 @@ function openDetail(nama) {
     ['Torsion J', fmt(p.J) + ' cm⁴'], ['Warping Cw', p.Cw.toExponential(3) + ' mm⁶'],
     ['ho (cg sayap)', p.ho.toFixed(1) + ' mm'], ['hw (web bersih)', p.hw.toFixed(1) + ' mm'],
     ['rts (LTB)', p.rts.toFixed(2) + ' mm'], ['λF sayap', p.lambdaF.toFixed(2)],
-    ['λW web', p.lambdaW.toFixed(2)], ['x̄ centroid', (p.tipe === 'kanal' ? p.xg.toFixed(1) + ' mm' : '0 (simetri)')]
-  ];
+    ['λW web', p.lambdaW.toFixed(2)], ['x̄ centroid', (p.tipe === 'i-shape' ? '0 (simetri)' : p.xg.toFixed(1) + ' mm')]
+  ]);
   document.getElementById('dGrid').innerHTML = grid(rows);
   document.getElementById('dFoot').textContent = 'Sumber: ' + p.sumber + ' · ' + LIBS[std].catatan + (p.catatan ? ' · CATATAN: ' + p.catatan : '') + ' · Perhatian: tinggi seri pada NAMA bukan tinggi sebenarnya — yang dipakai solver adalah tinggi aktual.';
   window._lastDetail = p;
@@ -393,8 +411,13 @@ function openDetail(nama) {
 
 function openVerify() {
   const fams = LIBS[std].keluarga.map(k => k.id);
+  const verifyNotes = {
+    BS: 'Penamaan BS memuat massa dalam nama profil (UB 457x191x67 → 67 kg/m). Jika dimensi yang tercatat keliru, massa hitungan geometris tidak akan cocok dengan angka terakhir pada namanya. Toleransi verifikasi: ±2%.',
+    EN: 'Nama seri EN 10365 / DIN 1026 hanya memuat tinggi seri (IPE 300, HEA 200, …) — tidak ada massa dalam nama, sehingga uji massa-dalam-nama tidak berlaku. Verifikasi pengganti: konsistensi internal berat ≡ A × 7850 kg/m³, serta pembandingan mandiri terhadap tabel pabrik sebelum pemakaian resmi.',
+    JIS: 'Nama profil JIS memuat dimensi (HW 400x400x13x21 → h × b × tw × tf), bukan massa — uji massa-dalam-nama tidak berlaku. Verifikasi pengganti: konsistensi internal berat ≡ A × 7850 kg/m³; CNP canai dingin memerlukan lebar efektif SNI 7971:2013 untuk desain penuh.'
+  };
   if (std === 'BS') {
-    document.getElementById('verifyNote').textContent = 'Penamaan BS memuat massa dalam nama profil (UB 457x191x67 → 67 kg/m). Jika dimensi yang tercatat keliru, massa hitungan geometris tidak akan cocok dengan angka terakhir pada namanya. Toleransi verifikasi: ±2%.';
+    document.getElementById('verifyNote').textContent = verifyNotes.BS;
     document.getElementById('verifySummary').innerHTML = fams.map(f => {
       const list = PUSTAKA.filter(p => p.kel === f);
       const ok = list.filter(p => Math.abs(p.dev) <= 2).length;
@@ -416,7 +439,7 @@ function openVerify() {
       '<td class="px-2 py-1.5 text-right">' + devBadge(p.dev) + '</td>' +
       '<td class="px-2 py-1.5 text-right ' + (Math.abs(p.dev) <= 2 ? 'text-emerald-400' : 'text-amber-400') + '">' + (Math.abs(p.dev) <= 2 ? '✓ SESUAI' : '⚠ SIMPANGAN') + '</td></tr>').join('');
   } else {
-    document.getElementById('verifyNote').textContent = 'Nama seri EN 10365 / DIN 1026 hanya memuat tinggi seri (IPE 300, HEA 200, …) — tidak ada massa dalam nama, sehingga uji massa-dalam-nama tidak berlaku. Verifikasi pengganti: konsistensi internal berat ≡ A × 7850 kg/m³, serta pembandingan mandiri terhadap tabel pabrik sebelum pemakaian resmi.';
+    document.getElementById('verifyNote').textContent = verifyNotes[std];
     document.getElementById('verifySummary').innerHTML = fams.map(f => {
       const list = PUSTAKA.filter(p => p.kel === f);
       let maxDev = 0; list.forEach(p => { const dd = Math.abs(p.berat - p.A * 100 * 0.00785); if (dd > maxDev) maxDev = dd; });
@@ -433,10 +456,10 @@ function openVerify() {
 function closeModal(id) { document.getElementById(id).classList.add('hidden2'); }
 
 function exportCsv() {
-  const head = ['Nama','Kode','Keluarga','Simetri','h_mm','b_mm','tw_mm','tf_mm','r_mm','A_cm2','Berat_kgm','MassaNominal_kgm','Ix_cm4','Iy_cm4','Sx_cm3','Sy_cm3','Zx_cm3','Zy_cm3','rx_mm','ry_mm','J_cm4','Cw_mm6','ho_mm','hw_mm','rts_mm','lambdaF','lambdaW','xg_mm','Deviasi_persen','Sumber'];
+  const head = ['Nama','Kode','Keluarga','Simetri','h_mm','b_mm','tw_mm','tf_mm','r_mm','c_lip_mm','A_cm2','Berat_kgm','MassaNominal_kgm','Ix_cm4','Iy_cm4','Sx_cm3','Sy_cm3','Zx_cm3','Zy_cm3','rx_mm','ry_mm','J_cm4','Cw_mm6','ho_mm','hw_mm','rts_mm','lambdaF','lambdaW','xg_mm','Deviasi_persen','Sumber'];
   const lines = PUSTAKA.map(p => {
     const q = p.raw;
-    return [p.nama, p.kel, p.tipe, p.simetri, p.h.toFixed(1), p.b.toFixed(1), p.tw.toFixed(1), p.tf.toFixed(1), p.r.toFixed(1),
+    return [p.nama, p.kel, p.tipe, p.simetri, p.h.toFixed(1), p.b.toFixed(1), p.tw.toFixed(1), p.tf.toFixed(1), p.r.toFixed(1), (p.cLip !== null ? p.cLip.toFixed(1) : ''),
       p.A.toFixed(2), p.berat.toFixed(3), p.mNom, p.Ix.toFixed(1), p.Iy.toFixed(1), p.Sx.toFixed(1), p.Sy.toFixed(1),
       p.Zx.toFixed(1), p.Zy.toFixed(1), p.rx.toFixed(2), p.ry.toFixed(2), p.J.toFixed(2), q.Cw, p.ho.toFixed(1), p.hw.toFixed(1),
       p.rts.toFixed(3), p.lambdaF.toFixed(3), p.lambdaW.toFixed(2), (p.tipe === 'kanal' ? p.xg.toFixed(2) : '0'),
@@ -477,9 +500,11 @@ function setStd(s) {
   std = s;
   localStorage.setItem('bajaStd', s);
   fam = 'ALL';
-  PUSTAKA = LIBS[std].profil.map(fromLib);
-  document.getElementById('stdBS').className = 'std-btn px-3 py-1.5 transition ' + (std === 'BS' ? 'bg-emerald-600/30 text-emerald-300' : 'bg-emerald-950/40 text-emerald-700 hover:text-emerald-300');
-  document.getElementById('stdEN').className = 'std-btn px-3 py-1.5 transition border-l border-emerald-800 ' + (std === 'EN' ? 'bg-emerald-600/30 text-emerald-300' : 'bg-emerald-950/40 text-emerald-700 hover:text-emerald-300');
+  PUSTAKA = LIBS[std].profil.map(p => fromLib(p, std));
+  document.querySelectorAll('.std-btn').forEach(btn => {
+    const on = btn.dataset.std === std;
+    btn.className = 'std-btn px-3 py-1.5 transition ' + (btn.previousElementSibling ? 'border-l border-emerald-800 ' : '') + (on ? 'bg-emerald-600/30 text-emerald-300' : 'bg-emerald-950/40 text-emerald-700 hover:text-emerald-300');
+  });
   renderFamTabs();
   renderStats();
   renderTable();
@@ -490,16 +515,15 @@ function setStd(s) {
    ================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
   const bar = document.getElementById('bootBar'), msg = document.getElementById('bootMsg');
-  msg.textContent = 'Memuat 2 pustaka profil (BS 4-1 + EN 10365)…';
+  msg.textContent = 'Memuat 3 pustaka profil (BS 4-1 + EN 10365 + JIS)…';
   bar.style.width = '60%';
   setTimeout(() => {
-    PUSTAKA = LIBS[std].profil.map(fromLib);
+    PUSTAKA = LIBS[std].profil.map(p => fromLib(p, std));
     bar.style.width = '100%';
-    msg.textContent = 'Selesai — 2 standar · 230 profil';
+    msg.textContent = 'Selesai — 3 standar · 334 profil';
     document.getElementById('libNote').textContent = 'Klik baris untuk detail · ' + LIBS[std].standar + ' · ' + LIBS[std].catatan;
     setStd(std);
-    document.getElementById('stdBS').addEventListener('click', () => setStd('BS'));
-    document.getElementById('stdEN').addEventListener('click', () => setStd('EN'));
+    document.querySelectorAll('.std-btn').forEach(btn => btn.addEventListener('click', () => setStd(btn.dataset.std)));
     document.getElementById('btnVerify').addEventListener('click', openVerify);
     document.getElementById('btnCsv').addEventListener('click', exportCsv);
     document.getElementById('btnCopy').addEventListener('click', function () {
